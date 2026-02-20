@@ -1,0 +1,1 @@
+# OpenQuatt-HA-automations
