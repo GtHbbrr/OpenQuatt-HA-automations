@@ -1,0 +1,413 @@
+- id: '1769118432680'
+  alias: Change pump level in OpenQuatt on change in Flowrate or FlowrateDemand until
+    Flowrate equal  FlowrateDemand
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - input_number.flow_demand
+  - trigger: state
+    entity_id:
+    - number.modbus_pump_level
+    for:
+      hours: 0
+      minutes: 2
+      seconds: 0
+  - trigger: state
+    entity_id:
+    - sensor.flowmeter_flowrate
+    for:
+      hours: 0
+      minutes: 2
+      seconds: 0
+  conditions:
+  - condition: state
+    entity_id: switch.modbus_pump_relay
+    state: 'on'
+  actions:
+  - variables:
+      sign: '{{ 1 }}'
+      oldflowrate: '{{ states(''sensor.flowmeter_flowrate'') | int }}'
+  - repeat:
+      while:
+      - condition: and
+        conditions:
+        - condition: template
+          value_template: '{{ (states(''input_number.flow_demand'')|int - states(''sensor.flowmeter_flowrate'')|int
+            | round(0) ) != 0 }}'
+        - condition: state
+          entity_id: switch.modbus_pump_relay
+          state: 'on'
+      sequence:
+      - variables:
+          currentlevel: '{{ states(''number.modbus_pump_level'') | float(0.00) }}'
+          delta: '{{ ( states(''sensor.flowmeter_flowrate'')|int - max ( 400 , min(
+            1000 , states(''input_number.flow_demand'')|int ) ) | round(0) ) }}'
+      - data_template:
+          entity_id: number.modbus_pump_level
+          value: '{{ min( 900 , max( 300 , currentlevel + sign * delta * 0.1 ) ) |int
+            }}'
+        action: number.set_value
+      - if:
+        - condition: template
+          value_template: '{{ ( states(''sensor.flowmeter_flowrate'')|int == 1200
+            ) or ( states(''sensor.flowmeter_flowrate'')|int == 400 ) }}'
+        then:
+        - variables:
+            sign: '{{ sign * -1 }}'
+      - delay:
+          seconds: 10
+  - metadata: {}
+    data:
+      title: Quatt
+      message: Flowrate was {{ oldflowrate }} is {{ states('sensor.flowmeter_flowrate')|int
+        | round(0) }} at level {{ states('number.modbus_pump_level') |int | round(0)
+        }}
+    action: notify.mobile_app_xxx
+  mode: restart
+- id: '1769166681112'
+  alias: OpenQuatt BottomHeater_off_when_Tbuiten_above_4
+  description: ''
+  triggers:
+  - trigger: numeric_state
+    entity_id:
+    - sensor.toutside_oq_filtered
+    above: 4
+  conditions:
+  - condition: numeric_state
+    entity_id: sensor.toutside_oq_filtered
+    above: 4
+  - condition: state
+    entity_id: select.modbus_working_mode
+    state:
+    - Heating
+    for:
+      hours: 0
+      minutes: 10
+  actions:
+  - metadata: {}
+    data:
+      title: Quatt
+      message: Tbuiten > 4 °C - Bodemplaatverwarming wordt uitgeschakeld
+    action: notify.mobile_app_xxx
+  - target:
+      entity_id: select.modbus_working_mode
+    data:
+      option: Standby
+    action: select.select_option
+  - target:
+      entity_id:
+      - counter.aktietimer_heat
+      - counter.aktietimer_keep_warm
+    data: {}
+    action: counter.reset
+  - metadata: {}
+    data:
+      value: Tbuiten>4 °C - BPV UIT
+    target:
+      entity_id: input_text.quattctrl_state
+    action: input_text.set_value
+  - delay:
+      hours: 0
+      minutes: 1
+  - target:
+      entity_id: select.modbus_working_mode
+    data:
+      option: Heating
+    action: select.select_option
+  mode: single
+- *id001
+- id: adjust_flow_rate_linear
+  alias: Adjust flow rate with change in compressor speed
+  description: Sets flow rate between 500 and 900 l/h based on compressor level 1-10
+  triggers:
+  - entity_id: number.modbus_compressor_level
+    trigger: state
+  actions:
+  - variables:
+      level: '{{ states(''number.modbus_compressor_level'') | int(1) }}'
+      calculated_flow: '{{ (500 + (level - 1) * 45) | int(800) }}'
+  - target:
+      entity_id: input_number.flow_demand
+    data:
+      value: '{{ calculated_flow }}'
+    action: input_number.set_value
+  - data:
+      level: info
+      message: 'HP Flow: Compressor Level {{ level }} -> Target Flow {{ calculated_flow
+        }} l/h'
+    action: system_log.write
+  mode: restart
+- id: '1769530224009'
+  alias: Adjust defrost discombobulator
+  description: ''
+  triggers:
+  - trigger: time_pattern
+    minutes: '59'
+    seconds: '50'
+  conditions:
+  - not:
+    - condition: state
+      entity_id: binary_sensor.heat_pump_listener_quatt_defrost_mode
+      state:
+      - 'on'
+  - condition: state
+    entity_id: select.modbus_working_mode
+    state:
+    - Heating
+  actions:
+  - variables:
+      old_value: '{{ states(''input_number.defrost_discombobulator'') | float(1) }}'
+      hour_kwh_output: '{{ states(''sensor.hour_totaal_kwh_output'') | float(1) }}'
+      hour_kwh_required: '{{ states(''sensor.hour_totaal_kwh_required'') | float(1)
+        }}'
+      new_value: '{{ min ( 1.25 , max ( 0.5 , old_value * ( hour_kwh_required / hour_kwh_output
+        ) ) ) | float(1) }}'
+  - target:
+      entity_id: input_number.defrost_discombobulator
+    data:
+      value: '{{ new_value }}'
+    action: input_number.set_value
+  - data:
+      level: info
+      message: 'HP Flow: Defrost discombobulator {{ old_value }} -> {{ new_value }}'
+    action: system_log.write
+  mode: single
+- id: '1769642770575'
+  alias: Heat Pump - Turn ON Heating
+  description: ''
+  triggers:
+  - trigger: template
+    value_template: '{{ states(''sensor.thermostat_room_temperature'') | float < (state_attr(''climate.woonkamer'',
+      ''temperature'') | float + 0.1) }}'
+  - trigger: state
+    entity_id: select.modbus_working_mode
+    to: Standby
+    for:
+      minutes: 5
+  conditions:
+  - condition: state
+    entity_id: select.modbus_working_mode
+    state: Standby
+    for:
+      minutes: 5
+  - condition: template
+    value_template: '{{ states(''sensor.thermostat_room_temperature'') | float < (state_attr(''climate.woonkamer'',
+      ''temperature'') | float + 0.1) }}'
+  actions:
+  - variables:
+      level: '{{ states(''number.modbus_compressor_level'') | int(1) }}'
+      calculated_flow: '{{ (500 + (level - 1) * 45) | int(800) }}'
+  - action: switch.turn_on
+    metadata: {}
+    target:
+      entity_id: switch.modbus_pump_relay
+    data: {}
+  - target:
+      entity_id: input_number.flow_demand
+    data:
+      value: '{{ calculated_flow }}'
+    action: input_number.set_value
+  - delay:
+      seconds: 30
+  - wait_template: '{{ states(''sensor.flowmeter_flowrate'') | float(0) > 400 }}'
+    timeout:
+      minutes: 10
+    continue_on_timeout: false
+  - if:
+    - condition: numeric_state
+      entity_id: sensor.flowmeter_flowrate
+      above: 400
+    then:
+    - action: utility_meter.calibrate
+      target:
+        entity_id:
+        - sensor.hour_totaal_kwh_output
+        - sensor.hour_totaal_kwh_required
+      data:
+        value: 0
+    - action: select.select_option
+      target:
+        entity_id: select.modbus_working_mode
+      data:
+        option: Heating
+  mode: restart
+- id: '1769643059590'
+  alias: Heat Pump - Go Standby
+  description: ''
+  triggers:
+  - trigger: template
+    value_template: '{{ states(''sensor.thermostat_room_temperature'') | float > (state_attr(''climate.woonkamer'',
+      ''temperature'') | float + 0.15) }}'
+  - trigger: state
+    entity_id: select.modbus_working_mode
+    to: Heating
+    for:
+      minutes: 10
+  conditions:
+  - condition: state
+    entity_id: select.modbus_working_mode
+    state: Heating
+    for:
+      minutes: 10
+  - condition: template
+    value_template: '{{ states(''sensor.thermostat_room_temperature'') | float > (state_attr(''climate.woonkamer'',
+      ''temperature'') | float + 0.15) }}'
+  actions:
+  - if:
+    - condition: state
+      entity_id: binary_sensor.heat_pump_listener_quatt_defrost_mode
+      state: 'on'
+    then:
+    - wait_for_trigger:
+      - entity_id:
+        - binary_sensor.heat_pump_listener_quatt_defrost_mode
+        to:
+        - 'off'
+        trigger: state
+      timeout:
+        minutes: 10
+      continue_on_timeout: true
+  - if:
+    - condition: template
+      value_template: '{{ states(''sensor.thermostat_room_temperature'') | float >
+        (state_attr(''climate.woonkamer'', ''temperature'') | float + 0.15) }}'
+    then:
+    - target:
+        entity_id: select.modbus_working_mode
+      data:
+        option: Standby
+      action: select.select_option
+    - delay:
+        hours: 0
+        minutes: 2
+    - if:
+      - condition: numeric_state
+        entity_id: sensor.heat_pump_listener_outside_temperature
+        below: 3
+      then:
+      - action: input_number.set_value
+        metadata: {}
+        target:
+          entity_id: input_number.flow_demand
+        data:
+          value: 400
+      else:
+      - if:
+        - condition: state
+          entity_id: select.modbus_working_mode
+          state: Standby
+        then:
+        - action: switch.turn_off
+          metadata: {}
+          target:
+            entity_id: switch.modbus_pump_relay
+          data: {}
+  mode: restart
+- id: '1769730302251'
+  alias: Heat Pump - Anti-Freeze Circulation with Hysteresis
+  description: Force 400 l/h circulation when in Standby and outside temp < 3°C; force
+    off otherwise when entering/leaving Standby or temp > 4°C. Hysteresis prevents
+    rapid toggling.
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.heat_pump_listener_outside_temperature
+    below: 3
+  - trigger: numeric_state
+    entity_id: sensor.heat_pump_listener_outside_temperature
+    above: 4
+  - trigger: state
+    entity_id: select.modbus_working_mode
+    to: Standby
+  - trigger: state
+    entity_id: select.modbus_working_mode
+    from: Standby
+  conditions: []
+  actions:
+  - if:
+    - condition: state
+      entity_id: select.modbus_working_mode
+      state: Standby
+    then:
+    - if:
+      - condition: numeric_state
+        entity_id: sensor.heat_pump_listener_outside_temperature
+        below: 3
+      then:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.flow_demand
+        data:
+          value: 400
+      - action: switch.turn_on
+        target:
+          entity_id: switch.modbus_pump_relay
+      else:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.modbus_pump_relay
+  mode: single
+- id: '1770925829332'
+  alias: Adjust Heat Pump Compressor Level obv Filtered 15min_Opwarmsnelheid
+  description: Adjusts compressor speed every 5 mins based on 5min warming trend power.
+  triggers:
+  - trigger: time_pattern
+    minutes: /15
+  conditions:
+  - condition: numeric_state
+    entity_id: sensor.heat_pump_listener_pump_power
+    above: 5
+  - condition: state
+    entity_id: select.modbus_working_mode
+    state: Heating
+  actions:
+  - variables:
+      current_level: '{{ states(''number.modbus_compressor_level'') | int(1) }}'
+      trend_tolerance_up: 0.1
+      trend_tolerance_down: 0.1
+      room: '{{ states(''sensor.thermostat_room_temperature'') | float(0) }}'
+      target: '{{ states(''sensor.netatmo_room_setpoint'') | float(0) }}'
+      trend: '{{ states(''sensor.filtered_opwarmsnelheid'') | float(0) }}'
+      trend_target: '{{ max ( -0.1 , min ( 0.1 , ( target - room ) ) ) | float(0)
+        }}'
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ trend > (trend_target + trend_tolerance_up) }}'
+      - condition: numeric_state
+        entity_id: number.modbus_compressor_level
+        above: 0
+      sequence:
+      - data:
+          value: '{{ current_level - 1 }}'
+        target:
+          entity_id: number.modbus_compressor_level
+        action: number.set_value
+      - data:
+          message: Decreasing compressor speed to {{ current_level - 1 }}
+        action: notify.mobile_app_xxx
+    - conditions:
+      - condition: template
+        value_template: '{{ trend < (trend_target - trend_tolerance_down) }}'
+      - condition: numeric_state
+        entity_id: number.modbus_compressor_level
+        below: 10
+      sequence:
+      - data:
+          value: '{{ current_level + 1 }}'
+        target:
+          entity_id: number.modbus_compressor_level
+        action: number.set_value
+      - data:
+          message: Increasing compressor speed to {{ current_level + 1 }}
+        action: notify.mobile_app_xxx
+    - conditions:
+      - condition: template
+        value_template: '{{ (trend >= (trend_target - trend_tolerance_down)) and (trend
+          <= (trend_target + trend_tolerance_up)) }}'
+      sequence:
+      - data:
+          message: Power balanced. Maintaining speed {{ current_level }}
+        action: notify.mobile_app_xxx
+    default: []
+  mode: single
