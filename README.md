@@ -1,7 +1,7 @@
 # OpenQuatt-HA-automations
 
 
-collectie van HA-automatiseringen tbv mijn OpenQuatt controller op de module van Electropaultje.nl
+collectie van HA-automatiseringen tbv mijn OpenQuatt controller op de Heatpump Listener module van www.Electropaultje.nl
 
 -aan/uit met koppeling naar mijn thermostaten 
 -een compressorregeling obv warmteverlies en warmtecapaciteit van mijn woning en
