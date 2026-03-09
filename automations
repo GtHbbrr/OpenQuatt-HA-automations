@@ -349,7 +349,7 @@
   mode: single
 - id: '1770925829332'
   alias: Adjust Heat Pump Compressor Level obv Filtered 15min_Opwarmsnelheid
-  description: Adjusts compressor speed every 5 mins based on 5min warming trend power.
+  description: Adjusts compressor speed every 5 mins based on 5min warming trend in room temperature.
   triggers:
   - trigger: time_pattern
     minutes: /15
