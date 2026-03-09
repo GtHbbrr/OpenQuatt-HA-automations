@@ -1,5 +1,8 @@
 # OpenQuatt-HA-automations
 
+
+collectie van HA-automatiseringen tbv mijn OpenQuatt controller op de module van Electropaultje.nl
+
 -aan/uit met koppeling naar mijn thermostaten 
 -een compressorregeling obv warmteverlies en warmtecapaciteit van mijn woning en
 -de antivries-bescherming op de waterpomp zodat de mechanische vorstklep niet in actie hoeft te komen beneden de 1 graden, en 
