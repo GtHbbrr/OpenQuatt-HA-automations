@@ -1,0 +1,84 @@
+
+
+utility_meter:
+  graaddagen_roomsetpoint_daily:
+    source: sensor.graaddagen_roomsetpoint
+    cron: 0 0 * * *
+
+template:
+  - sensor:
+      - name: "electric_power"
+        state: >
+            {% set standby_power = 5.150232354845286 %}
+            {% set voltage = states('sensor.heat_pump_listener_ac_voltage') | float(0) %}
+            {% set current = states('sensor.heat_pump_listener_ac_current') | float(0) %}
+            {% set fan_speed = states('sensor.heat_pump_listener_fan_speed') | float(0) %}
+            {% set pump_power = states('sensor.heat_pump_listener_pump_power') | float(0) if is_state('switch.modbus_pump_relay', 'on') else 0 %}
+            {% set bottom_plate_heater = 150.06430841218332 if is_state('binary_sensor.heat_pump_listener_quatt_bottom_heater', 'on') else 0 %}
+            {% set crank_case_heater = 40 if is_state('binary_sensor.heat_pump_listener_quatt_crankcase_heater', 'on') else 0 %}
+            
+            {% set comp_calibration = 1.1240096401010435 %}   
+            {% set fan_calibration = -0.04858859969715763 %}  
+            
+            {{ (
+                 standby_power
+               + voltage * current * comp_calibration
+               + fan_speed * fan_calibration   
+               + pump_power
+               + bottom_plate_heater
+               + crank_case_heater
+               ) | round(2)
+            }}            
+        unit_of_measurement: "W"
+        device_class: power    
+
+  - sensor:
+      - name: "heating_power"
+        device_class: "power"
+        unit_of_measurement: "W"
+        state_class: measurement
+        state: >
+          {% set flow = states('sensor.flowmeter_flowrate') | float(500) %}
+          {% set Tout  = states('sensor.heat_pump_listener_water_out_temperature') | float(32) %}
+          {% set Tin = states('sensor.heat_pump_listener_water_in_temperature') | float(30) %}
+          {{ (flow * ( Tout - Tin + 0.2 ) * 1.153724) | round(0, default=0) }}
+
+  - sensor:
+      - name: "cop_compleet"
+        unit_of_measurement: "CoP"
+        state: >
+          {% set power_in = states('sensor.electric_power') | float(400) %}
+          {% set power_out = states('sensor.heating_power') | float(2000) %}
+          {{ ( power_out / power_in ) | round(6, default=3) }}
+
+  - sensor:
+      - name: "cop_carnot40_prc"
+        unit_of_measurement: "%"
+        state: >
+          {% set t_aanvoer = states('sensor.heat_pump_listener_water_out_temperature') | float(32) %}
+          {% set t_buiten = states('sensor.heat_pump_listener_outside_temperature') | float(5) %}
+          {% set cop = states ('sensor.cop_compleet') | float(3) %}
+          {% set cc40 = ( cop / (0.40 * (t_aanvoer + 273.15) / (t_aanvoer - t_buiten)) ) | float(1) %}
+          {% if ( ( cc40 < 0.5 ) or ( cc40 > 1.5 ) ) %}
+            100.0
+          {% else %}
+            {{ ( cc40 * 100 ) | round(1, default=100) }}
+          {% endif %}  
+
+  - sensor:
+      - name: "deltaT_toHeat_room_setpoint"
+        device_class: "temperature"
+        unit_of_measurement: "°C"
+        state: >
+          {% set buitentemperatuur = states('sensor.heat_pump_listener_outside_temperature') | float %}
+          {% set gewenste_binnentemperatuur = states('sensor.thermostat_room_setpoint') | float %}
+          {{ max ( 0 , gewenste_binnentemperatuur - buitentemperatuur ) | round(3, default=0) }}
+
+  - sensor:
+      - name: "kwh_per_graaddag_room_setpoint"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state: >
+          {% set power_used = states('sensor.dag_totaal_kwh_input') | float %}
+          {% set graaddag = states('sensor.graaddagen_roomsetpoint_daily') | float %}
+          {{ (power_used / graaddag) | round(3, default=0) }}
