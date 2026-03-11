@@ -1,4 +1,9 @@
 
+## maak twee integral sensoren aan voor sensor.graaddagen_roomsetpoint en sensor.kWh_power_input:
+## integral sensor voor sensor.graaddagen_roomsetpoint obv sensor.deltaT_toHeat_room_setpoint, Trapezoid rule, precision 6 digits en Max subinterval 01 mm, en
+## integral sensor voor sensor.kWh_power_input obv sensor.electric_power, Trapezoid rule, precision 6 digits en Max subinterval 01 mm
+
+## onderstaande utility meters maken de dagelijks resettende dagtellers obv de graaddagen_roomsetpoint en kWh_power_input:
 
 utility_meter:
   graaddagen_roomsetpoint_daily:
@@ -7,10 +12,6 @@ utility_meter:
   dag_totaal_kwh_input:
     source: sensor.kWh_power_input
     cron: 0 0 * * *
-
-## maak twee integral sensoren aan voor sensor.graaddagen_roomsetpoint en sensor.kWh_power_input:
-## integral sensor voor sensor.graaddagen_roomsetpoint obv sensor.deltaT_toHeat_room_setpoint, Trapezoid rule, precision 6 digits en Max subinterval 01 mm, en
-## integral sensor voor sensor.kWh_power_input obv sensor.electric_power, Trapezoid rule, precision 6 digits en Max subinterval 01 mm
 
 template:
   - sensor:
