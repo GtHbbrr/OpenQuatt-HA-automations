@@ -10,7 +10,7 @@ utility_meter:
 
 ## maak twee integral sensoren aan voor sensor.graaddagen_roomsetpoint en sensor.kWh_power_input:
 ## integral sensor voor sensor.graaddagen_roomsetpoint obv sensor.deltaT_toHeat_room_setpoint, Trapezoid rule, precision 6 digits en Max subinterval 01 mm, en
-## integral sensor voor sensor.kWh_power_input obv sensor.electric_power, Trapezoid rule, precision 6 digits en Max subinterval 01 mm, en
+## integral sensor voor sensor.kWh_power_input obv sensor.electric_power, Trapezoid rule, precision 6 digits en Max subinterval 01 mm
 
 template:
   - sensor:
