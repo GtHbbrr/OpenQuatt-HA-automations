@@ -8,3 +8,5 @@ collectie van HA-automatiseringen tbv mijn OpenQuatt controller op de Heatpump L
 -de antivries-bescherming op de waterpomp zodat de mechanische vorstklep niet in actie hoeft te komen beneden de 1 graden, en 
 -een flowregeling die de compressorlevels volgt, 
 -en switching it off & on again als de buitentemperatuur weer boven 4 graden komt zodat de bodemplaatverwarming uit gaat
+
+Ik heb ook de HA-Helpers toegevoegd die ik gebruik voor COPcarnot en kWh/graaddagen
